@@ -6,9 +6,8 @@
 #define CAMERA_DATA 1 //to adjust
 #define CAMERA_POWER 2 //to adjust
 #define POTENTIOMETER_DATA A2
-#define POTENTIOMETER_POWER 14 //to adjust
 #define WEIGHT_DATA A1
-#define WEIGHT_POWER 8
+#define SENSORS_POWER 7
 #define INFRARED_DATA A0
 
 // MOTOR SET UP
@@ -29,10 +28,10 @@ const int stepSequence[4][4] = {
 
 //defining led pins
 #define SLEEP_LED 13
-#define FOOD_LOW_LED 12
-#define DISPENSING_LED 11
+#define FOOD_LOW_LED 9
+#define DISPENSING_LED 12
 #define CAMERA_LED 10
-#define TIME_LED 9
+#define TIME_LED 11
 
 // defining adjustable values
 #define DISTANCE 20 //can be adjusted (units in cm)
@@ -46,7 +45,7 @@ const int stepSequence[4][4] = {
 #define NOTCH_STEPS (MOTOR_STEPS_PER_REV / 2) // Steps per notch
 
 //for demo purposes - can be changed
-#define DEMO_INTERVAL 1 //1 minutes for now
+#define DEMO_INTERVAL 10000 //1 minutes for now
 #define TIME_CONVERT 1.0/6000 //convert milliseconds to minutes (for final product would be hours) 
 #define DEMO_SCALE 10 // adjustable 
 
@@ -88,31 +87,28 @@ void setup() {
   pinMode(CAMERA_POWER, OUTPUT);
 
   pinMode(POTENTIOMETER_DATA, INPUT);
-  pinMode(POTENTIOMETER_POWER, OUTPUT);
-
   pinMode(WEIGHT_DATA, INPUT);
-  pinMode(WEIGHT_POWER, OUTPUT);
+
+  pinMode(SENSORS_POWER, OUTPUT);
 
   pinMode(INFRARED_DATA, INPUT);
   pinMode(SLEEP_LED, OUTPUT);
   pinMode(FOOD_LOW_LED, OUTPUT); 
   pinMode(DISPENSING_LED, OUTPUT);
+  pinMode(CAMERA_LED, OUTPUT);
+  pinMode(TIME_LED, OUTPUT);
   
   pinMode(IN1, OUTPUT);
   pinMode(IN2, OUTPUT);
   pinMode(IN3, OUTPUT);
   pinMode(IN4, OUTPUT);
 
-
-
   //initiate LEDS
   digitalWrite(SLEEP_LED, LOW);
   digitalWrite(FOOD_LOW_LED, LOW);
   digitalWrite(DISPENSING_LED, LOW);
   digitalWrite(CAMERA_LED, LOW);
-
-  //initiate the sensors
-  digitalWrite(WEIGHT_POWER, HIGH);
+  digitalWrite(TIME_LED, LOW);
 
   //setup petfeeder to initiate in sleep mode
   activate_sleep();
@@ -121,6 +117,8 @@ void setup() {
 
   //initiating linked list (Matt Pan would be proud)
   pets = NULL; 
+
+  Serial.begin(9600);
 
 }
 
@@ -134,7 +132,7 @@ void loop() {
 
   //update IR sensor
   int proximity_raw = analogRead(INFRARED_DATA)*0.0048828125; // taken from lab1 part 2, which was taken from chat??
-  int proximity = 13*pow(proximity_raw, -1); //taken from lab1 part 2, again, worked out from datasheet graph
+  int proximity = abs(13*pow(proximity_raw, -1)); //taken from lab1 part 2, again, worked out from datasheet graph
 
   //update states
   if ( (proximity < DISTANCE) && (state == SLEEP)){
@@ -156,13 +154,13 @@ void loop() {
   //state machine things
   if (state == ACTIVE){
     //check potentiometer - need one
-    //desired_interval_raw = analogRead(POTENTIOMETER_DATA);
-    //desired_interval = map(desired_interval_raw, 0, (max value (V)), min value, max value); 
-    int desired_interval = DEMO_INTERVAL; 
+    int desired_interval_raw = analogRead(POTENTIOMETER_DATA);
+    int desired_interval = map(desired_interval_raw, 0, 1023, 0, 30); 
+    desired_interval = DEMO_INTERVAL + desired_interval*1000; //10 sec + max 30 sec 
 
     //check weight sensor
     int current_weight_raw = analogRead(WEIGHT_DATA);
-    int current_weight = map(current_weight_raw, 0, 1023, 0, 150); //2o lbs is what the sensor supports, but we're just mapping it to be a bigger number for demo purposes
+    int current_weight = map(current_weight_raw, 0, 1023, 0, 1000); //2o lbs is what the sensor supports, but we're just mapping it to be a bigger number for demo purposes
 
     //needs a debounce + way to get rid of noise
     if (current_weight > MIN_WEIGHT){
@@ -202,7 +200,6 @@ void loop() {
       if ( (time_now - pet_id->time_fed) > desired_interval){ 
         pet_id->time_fed = time_now;
         dispense_food(pet_id->size);
-        delay(500);
       }
       else{
         digitalWrite(TIME_LED, HIGH);
@@ -243,7 +240,7 @@ void add_pet(int weight){
   if (new_pet != NULL){
     new_pet->weight = weight;
     new_pet->size = find_weight_class(weight);
-    new_pet->time_fed = 999; //for logic reasons
+    new_pet->time_fed = 99999; //for logic reasons
     new_pet->next_pet = NULL;
   }
 
@@ -282,8 +279,9 @@ void activate_sleep() {
   digitalWrite(SLEEP_LED, HIGH);
   //control power to sensors being unused
   digitalWrite(CAMERA_POWER, LOW);
-  digitalWrite(POTENTIOMETER_POWER, LOW);
-  digitalWrite(WEIGHT_POWER, LOW);
+  digitalWrite(SENSORS_POWER, LOW);
+  // digitalWrite(POTENTIOMETER_POWER, LOW);
+  // digitalWrite(WEIGHT_POWER, LOW);
   digitalWrite(CAMERA_LED, LOW);
 }
 
@@ -292,8 +290,9 @@ void wake_up(){
   digitalWrite(SLEEP_LED, LOW);
   //control power to sensors that will be used
   digitalWrite(CAMERA_POWER, HIGH);
-  digitalWrite(POTENTIOMETER_POWER, HIGH);
-  digitalWrite(WEIGHT_POWER, HIGH);
+  digitalWrite(SENSORS_POWER, HIGH);
+  // digitalWrite(POTENTIOMETER_POWER, HIGH);
+  // digitalWrite(WEIGHT_POWER, HIGH);
   digitalWrite(CAMERA_LED, HIGH);
 }
 
@@ -322,30 +321,30 @@ void check_camera(){
 void dispense_food(enum weight_class wc){
   digitalWrite(DISPENSING_LED, HIGH);
   // Define food amounts for each weight class
-  int food_volume;
+  int food_rotations;
 
   switch (wc) {
     case S: 
-      food_volume = 296.25 / DEMO_SCALE;  // 1¼ cups = 296.25 cm³
+      food_volume = 2;  // demo
       break;
     case M: 
-      food_volume = 557.25 / DEMO_SCALE;  // 2⅓ cups = 557.25 cm³
+      food_volume = 4;  // demo
       break;
     case L: 
-      food_volume = 890.25 / DEMO_SCALE;  // 3¾ cups = 890.25 cm³
+      food_volume = 6;  // demo
       break;
   }
-
-  // Calculate the number of notches needed to dispense the desired volume
-  int notches_needed = food_volume / NOTCH_VOLUME;  // Total number of notches based on volume
+  //convert rotations to steps
+  // food_steps = food_volume*300
 
   // Enable the motor
   //digitalWrite(MOTOR_EN, LOW); // Active low for enabling A4988
 
   // Rotate the motor to dispense the food
-  stepMotor(notches_needed,1);
+  stepMotor(food_volume,1);
 
   // Disable the motor
+  delay(500);
   digitalWrite(DISPENSING_LED, LOW);
 }
 
@@ -368,4 +367,3 @@ void stepMotor(int steps, int direction) {
     }
   }
 }
-
