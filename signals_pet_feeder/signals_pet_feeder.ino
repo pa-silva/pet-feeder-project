@@ -15,7 +15,7 @@ const int IN1 = 2;  // L298N IN1
 const int IN2 = 3;  // L298N IN2
 const int IN3 = 4; // L298N IN3
 const int IN4 = 5; // L298N IN4
-const int stepDelay = 5; // Adjust this value for speed control
+const int stepDelay = 3; // Adjust this value for speed control
 // step pattern.
 const int stepSequence[4][4] = {
   {1, 0, 1, 0}, // Step 1
@@ -23,8 +23,6 @@ const int stepSequence[4][4] = {
   {0, 1, 0, 1}, // Step 3
   {1, 0, 0, 1}  // Step 4
 };
-
-#define LIMIT_SWITCH_PIN  15
 
 //defining led pins
 #define SLEEP_LED 13
@@ -38,16 +36,13 @@ const int stepSequence[4][4] = {
 #define MAX_TIME_AWAKE 5000 //can be adjusted (units in milliseconds)
 #define MIN_WEIGHT 200 //jank, do not touch
 #define WEIGHT_DEVIANCE 25 //can be adjusted (units in i dont know)
-#define NOTCH_VOLUME 50 // can be adjusted (units in cm^3)
 
 //Motor Values
-#define MOTOR_STEPS_PER_REV 200 // Steps per revolution for the QSH4218 motor
-#define NOTCH_STEPS (MOTOR_STEPS_PER_REV / 2) // Steps per notch
+#define MOTOR_STEPS_PER_REV 260 // Steps per revolution for the QSH4218 motor
 
 //for demo purposes - can be changed
 #define DEMO_INTERVAL 10000 //1 minutes for now
-#define TIME_CONVERT 1.0/6000 //convert milliseconds to minutes (for final product would be hours) 
-#define DEMO_SCALE 10 // adjustable 
+#define DEMO_SCALE 30 // adjustable 
 
 //defining enums & structs we're going to use in code
 enum machine_states {
@@ -110,6 +105,11 @@ void setup() {
   digitalWrite(CAMERA_LED, LOW);
   digitalWrite(TIME_LED, LOW);
 
+  digitalWrite(IN1, LOW);
+  digitalWrite(IN2, LOW);
+  digitalWrite(IN3, LOW);
+  digitalWrite(IN4, LOW);
+
   //setup petfeeder to initiate in sleep mode
   activate_sleep();
   state = SLEEP; 
@@ -137,6 +137,33 @@ void loop() {
   //update states
   if ( (proximity < DISTANCE) && (state == SLEEP)){
     //machine is sleeping, but senses animal
+            
+      // Start debounce period
+      delay(500);
+
+      // Collect multiple readings
+      int num_samples = 5;
+      int total_prox = 0;
+      for (int i = 0; i < num_samples; i++) {
+          delay(100);
+          int temp_prox = analogRead(INFRARED_DATA)*0.0048828125;;
+          temp_prox = abs(13*pow(temp_prox, -1));
+          total_prox += temp_prox;
+          delay(100); // Small delay between samples
+      }
+
+      // Calculate the average weight
+      int avg_prox = total_prox / num_samples;
+
+      // Check if average weight is stable
+      if (avg_prox < proximity - 5 || avg_prox > proximity + 5) {
+          return; // Not stable, exit and retry
+      }
+
+      // Use avg_weight as the final stabilized weight
+      proximity = avg_prox;
+      //end debounce period
+
     wake_up();
     state = ACTIVE;
     time_last_active = time_now;
@@ -156,7 +183,7 @@ void loop() {
     //check potentiometer - need one
     int desired_interval_raw = analogRead(POTENTIOMETER_DATA);
     int desired_interval = map(desired_interval_raw, 0, 1023, 0, 30); 
-    desired_interval = DEMO_INTERVAL + desired_interval*1000; //10 sec + max 30 sec 
+    desired_interval = DEMO_INTERVAL + desired_interval*1000; //30 sec + max 30 sec 
 
     //check weight sensor
     int current_weight_raw = analogRead(WEIGHT_DATA);
@@ -280,8 +307,6 @@ void activate_sleep() {
   //control power to sensors being unused
   digitalWrite(CAMERA_POWER, LOW);
   digitalWrite(SENSORS_POWER, LOW);
-  // digitalWrite(POTENTIOMETER_POWER, LOW);
-  // digitalWrite(WEIGHT_POWER, LOW);
   digitalWrite(CAMERA_LED, LOW);
 }
 
@@ -291,9 +316,9 @@ void wake_up(){
   //control power to sensors that will be used
   digitalWrite(CAMERA_POWER, HIGH);
   digitalWrite(SENSORS_POWER, HIGH);
-  // digitalWrite(POTENTIOMETER_POWER, HIGH);
-  // digitalWrite(WEIGHT_POWER, HIGH);
   digitalWrite(CAMERA_LED, HIGH);
+
+
 }
 
 //sensor and actuator functions
@@ -321,7 +346,7 @@ void check_camera(){
 void dispense_food(enum weight_class wc){
   digitalWrite(DISPENSING_LED, HIGH);
   // Define food amounts for each weight class
-  int food_rotations;
+  int food_volume, food_steps;
 
   switch (wc) {
     case S: 
@@ -335,16 +360,23 @@ void dispense_food(enum weight_class wc){
       break;
   }
   //convert rotations to steps
-  // food_steps = food_volume*300
+  food_steps = food_volume*MOTOR_STEPS_PER_REV;
 
   // Enable the motor
-  //digitalWrite(MOTOR_EN, LOW); // Active low for enabling A4988
+  digitalWrite(IN1, HIGH);
+  digitalWrite(IN2, HIGH);
+  digitalWrite(IN3, HIGH);
+  digitalWrite(IN4, HIGH);
 
   // Rotate the motor to dispense the food
-  stepMotor(food_volume,1);
+  stepMotor(food_steps,1);
 
   // Disable the motor
-  delay(500);
+  digitalWrite(IN1, LOW);
+  digitalWrite(IN2, LOW);
+  digitalWrite(IN3, LOW);
+  digitalWrite(IN4, LOW);
+
   digitalWrite(DISPENSING_LED, LOW);
 }
 

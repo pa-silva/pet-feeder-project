@@ -1,102 +1,51 @@
+// Define motor control pins
+const int IN1 = 2;  // L298N IN1
+const int IN2 = 3;  // L298N IN2
+const int IN3 = 4;  // L298N IN3
+const int IN4 = 5;  // L298N IN4
+const int stepDelay = 5; // Adjust for speed control (milliseconds)
 
-#define MOTOR_STEP 7
-#define MOTOR_DIR 8
-#define MOTOR_EN 13
+// Define step sequence
+const int stepSequence[4][4] = {
+  {1, 0, 1, 0}, // Step 1
+  {0, 1, 1, 0}, // Step 2
+  {0, 1, 0, 1}, // Step 3
+  {1, 0, 0, 1}  // Step 4
+};
 
-//Motor Values
-#define MOTOR_STEPS_PER_REV 200 // Steps per revolution for the QSH4218 motor
-#define NOTCH_STEPS (MOTOR_STEPS_PER_REV / 2) // Steps per notch
+// Function to set motor pins
+void setMotorPins(int a, int b, int c, int d) {
+  digitalWrite(IN1, a);
+  digitalWrite(IN2, b);
+  digitalWrite(IN3, c);
+  digitalWrite(IN4, d);
+}
+
+// Function for continuous rotation
+void rotateMotor(int direction) {
+  while (true) { // Infinite loop for ongoing rotation
+    for (int j = 0; j < 4; j++) {
+      int index = (direction == 1) ? j : (3 - j); // Adjust direction
+      setMotorPins(stepSequence[index][0], stepSequence[index][1], 
+                   stepSequence[index][2], stepSequence[index][3]);
+      delay(stepDelay); // Control speed
+    }
+  }
+}
 
 void setup() {
-  // put your setup code here, to run once:
-    pinMode(MOTOR_STEP, OUTPUT);
-    pinMode(MOTOR_DIR, OUTPUT);
-    pinMode(MOTOR_EN, OUTPUT);
+  // Set motor pins as output
+  pinMode(IN1, OUTPUT);
+  pinMode(IN2, OUTPUT);
+  pinMode(IN3, OUTPUT);
+  pinMode(IN4, OUTPUT);
 
-    pinMode(SLEEP_LED, OUTPUT);
-    pinMode(FOOD_LOW_LED, OUTPUT); 
-    pinMode(DISPENSING_LED, OUTPUT);
-
-    //initiate LEDS
-    digitalWrite(SLEEP_LED, LOW);
-    digitalWrite(FOOD_LOW_LED, LOW);
-    digitalWrite(DISPENSING_LED, LOW);
-    digitalWrite(CAMERA_LED, LOW);
-
-    //initiate the motor
-    digitalWrite(MOTOR_STEP, LOW);
-    digitalWrite(MOTOR_DIR, HIGH); // Default direction
-
-    //setup petfeeder to initiate in sleep mode
-    activate_sleep();
-    state = SLEEP; 
-    time_last_active = 0;
-
-    //initiating linked list (Matt Pan would be proud)
-    pets = NULL; 
+  Serial.begin(9600);
+  Serial.println("Starting motor rotation...");
 }
 
 void loop() {
-  // put your main code here, to run repeatedly:
-
-}
-
-void dispense_food(enum weight_class wc){
-  digitalWrite(DISPENSING_LED, HIGH);
-  // Define food amounts for each weight class
-  int food_volume;
-  
-  switch (wc) {
-    case XS: 
-      food_volume = 118.5 / DEMO_SCALE;  // ½ cup = 118.5 cm³
-      break; 
-    case S: 
-      food_volume = 296.25 / DEMO_SCALE;  // 1¼ cups = 296.25 cm³
-      break;
-    case SM: 
-      food_volume = 396.75 / DEMO_SCALE;  // 1⅔ cups = 396.75 cm³
-      break;
-    case M: 
-      food_volume = 557.25 / DEMO_SCALE;  // 2⅓ cups = 557.25 cm³
-      break;
-    case ML:
-      food_volume = 711 / DEMO_SCALE;  // 3 cups = 711 cm³
-      break;
-    case L: 
-      food_volume = 890.25 / DEMO_SCALE;  // 3¾ cups = 890.25 cm³
-      break;
-    case XL:
-      food_volume = 1115.5 / DEMO_SCALE;  // 4⅔ cups = 1115.5 cm³
-      break;
-  }
-
-  // Calculate the number of notches needed to dispense the desired volume
-  int notches_needed = food_volume / NOTCH_VOLUME;  // Total number of notches based on volume
-
-  // Enable the motor
-  digitalWrite(MOTOR_EN, LOW); // Active low for enabling A4988
-
-  // Rotate the motor to dispense the food
-  for (int i = 0; i < notches_needed; i++) {
-    digitalWrite(MOTOR_STEP, HIGH);
-    delayMicroseconds(800); // Step pulse width (adjust for motor speed)
-    digitalWrite(MOTOR_STEP, LOW);
-    delayMicroseconds(800); // Step interval
-  }
-
-  // Disable the motor
-  digitalWrite(MOTOR_EN, HIGH); // Disable motor when idle
-  digitalWrite(DISPENSING_LED, LOW);
-}
-
-void homeRotaryValve() { 
-  while (digitalRead(LIMIT_SWITCH_PIN) == HIGH) { // Assuming LOW when triggered
-    digitalWrite(MOTOR_DIR, LOW); // Rotate backward
-    digitalWrite(MOTOR_STEP, HIGH);
-    delayMicroseconds(1000);
-    digitalWrite(MOTOR_STEP, LOW);
-    delayMicroseconds(1000);
-  }
-  // Stop motor
-  digitalWrite(MOTOR_EN, HIGH);
+  // Call rotateMotor with direction
+  rotateMotor(1); // Use 1 for clockwise, -1 for counterclockwise
+  Serial.println("loop ran");
 }
