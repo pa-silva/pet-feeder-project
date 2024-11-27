@@ -1,3 +1,5 @@
+#define WEIGHT_DATA A1
+
 // Define motor control pins
 const int IN1 = 2;  // L298N IN1
 const int IN2 = 3;  // L298N IN2
@@ -21,16 +23,19 @@ void setMotorPins(int a, int b, int c, int d) {
   digitalWrite(IN4, d);
 }
 
-// Function for continuous rotation
-void rotateMotor(int direction) {
-  while (true) { // Infinite loop for ongoing rotation
-    for (int j = 0; j < 4; j++) {
-      int index = (direction == 1) ? j : (3 - j); // Adjust direction
-      setMotorPins(stepSequence[index][0], stepSequence[index][1], 
-                   stepSequence[index][2], stepSequence[index][3]);
-      delay(stepDelay); // Control speed
-    }
+// Function to rotate the motor one step
+void rotateMotorStep(int direction) {
+  for (int j = 0; j < 4; j++) {
+    int index = (direction == 1) ? j : (3 - j); // Adjust direction
+    setMotorPins(stepSequence[index][0], stepSequence[index][1], 
+                 stepSequence[index][2], stepSequence[index][3]);
+    delay(stepDelay); // Control speed
   }
+}
+
+// Function to stop the motor
+void stopMotor() {
+  setMotorPins(0, 0, 0, 0); // Turn off all motor pins
 }
 
 void setup() {
@@ -40,12 +45,28 @@ void setup() {
   pinMode(IN3, OUTPUT);
   pinMode(IN4, OUTPUT);
 
+  // Set weight sensor as input
+  pinMode(WEIGHT_DATA, INPUT);
+
   Serial.begin(9600);
   Serial.println("Starting motor rotation...");
 }
 
 void loop() {
-  // Call rotateMotor with direction
-  rotateMotor(1); // Use 1 for clockwise, -1 for counterclockwise
-  Serial.println("loop ran");
+  // Read weight sensor value
+  int current_weight_raw = analogRead(WEIGHT_DATA);
+  int current_weight = map(current_weight_raw, 0, 1023, 0, 1000); 
+  Serial.print("Current weight: ");
+  Serial.println(current_weight);
+
+  // If weight exceeds threshold, stop the motor
+  if (current_weight > 100) {
+    Serial.println("Weight limit exceeded. Stopping motor...");
+    stopMotor();
+    delay(500); // Pause for a moment
+    return;
+  }
+
+  // Rotate motor in counterclockwise direction
+  rotateMotorStep(1); // Use 1 for clockwise, -1 for counterclockwise
 }

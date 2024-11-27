@@ -1,21 +1,20 @@
 //Group 17 MREN 318 Pet Feeding Software
 //website used for pet feeding values: https://www.petmd.com/dog/nutrition/are-you-feeding-your-dog-right-amount 
 
-
 //defining pin values for sensors & actuators
-#define CAMERA_DATA 1 //to adjust
-#define CAMERA_POWER 2 //to adjust
+// #define CAMERA_DATA 1 //to adjust
+// #define CAMERA_POWER 2 //to adjust
 #define POTENTIOMETER_DATA A2
 #define WEIGHT_DATA A1
-#define SENSORS_POWER 7
+#define SENSORS_POWER 5
 #define INFRARED_DATA A0
 
 // MOTOR SET UP
-const int IN1 = 2;  // L298N IN1
-const int IN2 = 3;  // L298N IN2
-const int IN3 = 4; // L298N IN3
-const int IN4 = 5; // L298N IN4
-const int stepDelay = 3; // Adjust this value for speed control
+const int IN1 = 9;  // L298N IN1
+const int IN2 = 8;  // L298N IN2
+const int IN3 = 7; // L298N IN3
+const int IN4 = 6; // L298N IN4
+const int stepDelay = 7; // Adjust this value for speed control
 // step pattern.
 const int stepSequence[4][4] = {
   {1, 0, 1, 0}, // Step 1
@@ -25,11 +24,11 @@ const int stepSequence[4][4] = {
 };
 
 //defining led pins
-#define SLEEP_LED 13
-#define FOOD_LOW_LED 9
-#define DISPENSING_LED 12
-#define CAMERA_LED 10
-#define TIME_LED 11
+#define SLEEP_LED 0
+#define FOOD_LOW_LED 1
+#define DISPENSING_LED 2
+#define TIME_LED 3
+#define CAMERA_LED 4
 
 // defining adjustable values
 #define DISTANCE 20 //can be adjusted (units in cm)
@@ -78,8 +77,8 @@ void homeRotaryValve();
 void setup() {
   // put your setup code here, to run once:
   //setting up sensor pins
-  pinMode(CAMERA_DATA, INPUT);
-  pinMode(CAMERA_POWER, OUTPUT);
+  // pinMode(CAMERA_DATA, INPUT);
+  // pinMode(CAMERA_POWER, OUTPUT);
 
   pinMode(POTENTIOMETER_DATA, INPUT);
   pinMode(WEIGHT_DATA, INPUT);
@@ -305,7 +304,7 @@ void activate_sleep() {
   //status led 
   digitalWrite(SLEEP_LED, HIGH);
   //control power to sensors being unused
-  digitalWrite(CAMERA_POWER, LOW);
+  // digitalWrite(CAMERA_POWER, LOW);
   digitalWrite(SENSORS_POWER, LOW);
   digitalWrite(CAMERA_LED, LOW);
 }
@@ -314,7 +313,7 @@ void wake_up(){
   //status led
   digitalWrite(SLEEP_LED, LOW);
   //control power to sensors that will be used
-  digitalWrite(CAMERA_POWER, HIGH);
+  // digitalWrite(CAMERA_POWER, HIGH);
   digitalWrite(SENSORS_POWER, HIGH);
   digitalWrite(CAMERA_LED, HIGH);
 
@@ -346,17 +345,18 @@ void check_camera(){
 void dispense_food(enum weight_class wc){
   digitalWrite(DISPENSING_LED, HIGH);
   // Define food amounts for each weight class
-  int food_volume, food_steps;
+  float food_volume;
+  int food_steps;
 
   switch (wc) {
     case S: 
-      food_volume = 2;  // demo
+      food_volume = 0.5;  // demo
       break;
     case M: 
-      food_volume = 4;  // demo
+      food_volume = 1;  // demo
       break;
     case L: 
-      food_volume = 6;  // demo
+      food_volume = 2;  // demo
       break;
   }
   //convert rotations to steps
