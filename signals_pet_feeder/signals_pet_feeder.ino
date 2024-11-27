@@ -1,13 +1,18 @@
 //Group 17 MREN 318 Pet Feeding Software
 //website used for pet feeding values: https://www.petmd.com/dog/nutrition/are-you-feeding-your-dog-right-amount 
+#include <ArduCAM.h>
+#include <SPI.h>
+#include <Wire.h>
 
 //defining pin values for sensors & actuators
-// #define CAMERA_DATA 1 //to adjust
-// #define CAMERA_POWER 2 //to adjust
 #define POTENTIOMETER_DATA A2
 #define WEIGHT_DATA A1
 #define SENSORS_POWER 5
 #define INFRARED_DATA A0
+
+//camera definitons
+#define CS_PIN 10  // Chip Select Pin for SPI (default for Uno R4)
+ArduCAM myCAM(OV2640, CS_PIN);
 
 // MOTOR SET UP
 const int IN1 = 9;  // L298N IN1
@@ -25,7 +30,7 @@ const int stepSequence[4][4] = {
 
 //defining led pins
 #define SLEEP_LED 0
-#define FOOD_LOW_LED 1
+#define FOOD_LED 1
 #define DISPENSING_LED 2
 #define TIME_LED 3
 #define CAMERA_LED 4
@@ -35,6 +40,7 @@ const int stepSequence[4][4] = {
 #define MAX_TIME_AWAKE 5000 //can be adjusted (units in milliseconds)
 #define MIN_WEIGHT 200 //jank, do not touch
 #define WEIGHT_DEVIANCE 25 //can be adjusted (units in i dont know)
+#define CAMERA_MIN 70 //can be adjusted
 
 //Motor Values
 #define MOTOR_STEPS_PER_REV 260 // Steps per revolution for the QSH4218 motor
@@ -77,29 +83,55 @@ void homeRotaryValve();
 void setup() {
   // put your setup code here, to run once:
   //setting up sensor pins
-  // pinMode(CAMERA_DATA, INPUT);
-  // pinMode(CAMERA_POWER, OUTPUT);
-
   pinMode(POTENTIOMETER_DATA, INPUT);
   pinMode(WEIGHT_DATA, INPUT);
-
   pinMode(SENSORS_POWER, OUTPUT);
 
+  //LED pins
   pinMode(INFRARED_DATA, INPUT);
   pinMode(SLEEP_LED, OUTPUT);
-  pinMode(FOOD_LOW_LED, OUTPUT); 
+  pinMode(FOOD_LED, OUTPUT); 
   pinMode(DISPENSING_LED, OUTPUT);
   pinMode(CAMERA_LED, OUTPUT);
   pinMode(TIME_LED, OUTPUT);
   
+  //motor pins
   pinMode(IN1, OUTPUT);
   pinMode(IN2, OUTPUT);
   pinMode(IN3, OUTPUT);
   pinMode(IN4, OUTPUT);
 
+  //camera setup  
+  Serial.begin(115200);
+
+  // Initialize SPI and camera
+  Wire.begin(); // SDA and SCL (near AREF on Uno R4)
+  SPI.begin();
+  pinMode(CS_PIN, OUTPUT);
+  digitalWrite(CS_PIN, HIGH);
+
+  // Allow time for the camera to power on
+  delay(500);
+
+  // Initialize camera
+  myCAM.write_reg(0x07, 0x80);  // Reset the camera
+  delay(500);                    // Increased delay for reset
+  myCAM.write_reg(0x07, 0x00);  // End reset
+  delay(500);                    // Increased delay for reset completion
+
+  // Set the camera format to RGB (RAW)
+  myCAM.set_format(RAW);
+  delay(100);
+
+  // Set resolution to 320x240
+  myCAM.OV2640_set_JPEG_size(OV2640_320x240);
+  delay(100);
+
+  myCAM.InitCAM();
+
   //initiate LEDS
   digitalWrite(SLEEP_LED, LOW);
-  digitalWrite(FOOD_LOW_LED, LOW);
+  digitalWrite(FOOD_LED, LOW);
   digitalWrite(DISPENSING_LED, LOW);
   digitalWrite(CAMERA_LED, LOW);
   digitalWrite(TIME_LED, LOW);
@@ -116,8 +148,6 @@ void setup() {
 
   //initiating linked list (Matt Pan would be proud)
   pets = NULL; 
-
-  Serial.begin(9600);
 
 }
 
@@ -334,12 +364,60 @@ enum weight_class find_weight_class(int weight){
 }
 
 void check_camera(){
-  //add code here
-  /*
-  if ( low food ){
-    digitalWrite(FOOD_LOW_LED, HIGH);
+  // Capture a frame
+  myCAM.flush_fifo();
+  myCAM.clear_fifo_flag();
+  myCAM.start_capture();
+
+  // Wait for the capture to complete
+  while (!myCAM.get_bit(ARDUCHIP_TRIG, CAP_DONE_MASK));
+
+  // Read frame data
+  uint32_t pixel_count = 0;
+  uint32_t light_sum = 0;
+
+  myCAM.CS_LOW();
+  myCAM.set_fifo_burst();
+
+  // Read a fixed number of pixels based on the resolution (320x240 for example)
+  for (uint32_t i = 0; i < 320 * 240; i++) {
+    uint8_t data1 = SPI.transfer(0x00);  // Read first byte of pixel
+    uint8_t data2 = SPI.transfer(0x00);  // Read second byte of pixel (for RGB565)
+
+    // Combine two bytes to form the RGB565 value (16-bit)
+    uint16_t rgb565 = (data1 << 8) | data2;
+
+    // Extract the RGB components from RGB565
+    uint8_t r = (rgb565 >> 11) & 0x1F;   // Red (5 bits)
+    uint8_t g = (rgb565 >> 5) & 0x3F;    // Green (6 bits)
+    uint8_t b = rgb565 & 0x1F;           // Blue (5 bits)
+
+    // Optionally, normalize the components to 0-255 range if needed
+    r = map(r, 0, 31, 0, 255);  // Scale to 8 bits
+    g = map(g, 0, 63, 0, 255);  // Scale to 8 bits
+    b = map(b, 0, 31, 0, 255);  // Scale to 8 bits
+
+    // Focus on the red channel for intensity calculation
+    uint8_t intensity = r;  // Use the red channel as the light intensity
+
+    // Accumulate intensity
+    light_sum += intensity;
+    pixel_count++;
   }
-  */
+
+  myCAM.CS_HIGH();
+
+  // Calculate the average light intensity
+  float avg_light = (float)light_sum / pixel_count;
+
+  // Decide food level based on light intensity (focus on red)
+  if (avg_light > CAMERA_MIN) { // Adjust threshold as needed based on environment
+    digitalWrite(FOOD_LED, HIGH);
+  } else {
+    digitalWrite(FOOD_LED, LOW);
+  }
+
+  delay(1000); // Wait for 1 second before the next capture
 }
 
 void dispense_food(enum weight_class wc){
