@@ -7,7 +7,7 @@
 //defining pin values for sensors & actuators
 #define POTENTIOMETER_DATA A2
 #define WEIGHT_DATA A1
-#define SENSORS_POWER 5
+#define SENSORS_POWER 8
 #define INFRARED_DATA A0
 
 //camera definitons
@@ -15,18 +15,9 @@
 ArduCAM myCAM(OV2640, CS_PIN);
 
 // MOTOR SET UP
-const int IN1 = 9;  // L298N IN1
-const int IN2 = 8;  // L298N IN2
-const int IN3 = 7; // L298N IN3
-const int IN4 = 6; // L298N IN4
-const int stepDelay = 7; // Adjust this value for speed control
-// step pattern.
-const int stepSequence[4][4] = {
-  {1, 0, 1, 0}, // Step 1
-  {0, 1, 1, 0}, // Step 2
-  {0, 1, 0, 1}, // Step 3
-  {1, 0, 0, 1}  // Step 4
-};
+#define STEP_PIN 7
+#define DIRECTION_PIN 6
+#define MOTOR_NENABLE 5
 
 //defining led pins
 #define SLEEP_LED 0
@@ -37,23 +28,22 @@ const int stepSequence[4][4] = {
 
 // defining adjustable values
 #define DISTANCE 20 //can be adjusted (units in cm)
-#define MAX_TIME_AWAKE 5000 //can be adjusted (units in milliseconds)
-#define MIN_WEIGHT 200 //jank, do not touch
+#define MAX_TIME_AWAKE 10000 //can be adjusted (units in milliseconds)
+#define MIN_WEIGHT 150 //jank, do not touch
 #define WEIGHT_DEVIANCE 25 //can be adjusted (units in i dont know)
-#define CAMERA_MIN 70 //can be adjusted
+#define CAMERA_MIN 30 //can be adjusted
 
 //Motor Values
-#define MOTOR_STEPS_PER_REV 260 // Steps per revolution for the QSH4218 motor
+#define MOTOR_STEPS_PER_REV 1050 // Steps per revolution for the QSH4218 motor
 
 //for demo purposes - can be changed
-#define DEMO_INTERVAL 10000 //1 minutes for now
-#define DEMO_SCALE 30 // adjustable 
+#define DEMO_INTERVAL 30000 //1 minutes for now
 
 //defining enums & structs we're going to use in code
 enum machine_states {
   SLEEP, ACTIVE
 };
-enum weight_class { //might have to reduce sizes to S,M,L
+enum weight_class {
   S, M, L
 };
 struct pet_in_list{
@@ -95,12 +85,14 @@ void setup() {
   pinMode(CAMERA_LED, OUTPUT);
   pinMode(TIME_LED, OUTPUT);
   
-  //motor pins
-  pinMode(IN1, OUTPUT);
-  pinMode(IN2, OUTPUT);
-  pinMode(IN3, OUTPUT);
-  pinMode(IN4, OUTPUT);
+  //motor setup
+  pinMode(DIRECTION_PIN, OUTPUT);
+  pinMode(STEP_PIN, OUTPUT);
+  pinMode(MOTOR_NENABLE, OUTPUT);
 
+  digitalWrite(DIRECTION_PIN, LOW);
+  digitalWrite(MOTOR_NENABLE, HIGH);
+  
   //camera setup  
   Serial.begin(115200);
 
@@ -135,11 +127,6 @@ void setup() {
   digitalWrite(DISPENSING_LED, LOW);
   digitalWrite(CAMERA_LED, LOW);
   digitalWrite(TIME_LED, LOW);
-
-  digitalWrite(IN1, LOW);
-  digitalWrite(IN2, LOW);
-  digitalWrite(IN3, LOW);
-  digitalWrite(IN4, LOW);
 
   //setup petfeeder to initiate in sleep mode
   activate_sleep();
@@ -206,7 +193,6 @@ void loop() {
     //machine is awake and animal is present
     time_last_active = time_now;
   }
-
   //state machine things
   if (state == ACTIVE){
     //check potentiometer - need one
@@ -217,7 +203,7 @@ void loop() {
     //check weight sensor
     int current_weight_raw = analogRead(WEIGHT_DATA);
     int current_weight = map(current_weight_raw, 0, 1023, 0, 1000); //2o lbs is what the sensor supports, but we're just mapping it to be a bigger number for demo purposes
-
+    Serial.println(current_weight);
     //needs a debounce + way to get rid of noise
     if (current_weight > MIN_WEIGHT){
 
@@ -334,7 +320,6 @@ void activate_sleep() {
   //status led 
   digitalWrite(SLEEP_LED, HIGH);
   //control power to sensors being unused
-  // digitalWrite(CAMERA_POWER, LOW);
   digitalWrite(SENSORS_POWER, LOW);
   digitalWrite(CAMERA_LED, LOW);
 }
@@ -343,22 +328,19 @@ void wake_up(){
   //status led
   digitalWrite(SLEEP_LED, LOW);
   //control power to sensors that will be used
-  // digitalWrite(CAMERA_POWER, HIGH);
   digitalWrite(SENSORS_POWER, HIGH);
   digitalWrite(CAMERA_LED, HIGH);
-
-
 }
 
 //sensor and actuator functions
 enum weight_class find_weight_class(int weight){
-  if (200 <= weight && weight < 500) {
+  if (150 <= weight && weight < 200) {
     return S;
   }
-  else if (500 <= weight && weight < 600){
+  else if (200 <= weight && weight < 250){
     return M;
   }
-  else if (600 <= weight){
+  else if (250 <= weight){
     return L;
   }
 }
@@ -441,39 +423,32 @@ void dispense_food(enum weight_class wc){
   food_steps = food_volume*MOTOR_STEPS_PER_REV;
 
   // Enable the motor
-  digitalWrite(IN1, HIGH);
-  digitalWrite(IN2, HIGH);
-  digitalWrite(IN3, HIGH);
-  digitalWrite(IN4, HIGH);
+  digitalWrite(MOTOR_NENABLE, LOW);
 
   // Rotate the motor to dispense the food
-  stepMotor(food_steps,1);
+  stepMotor(food_steps);
+
+  //bounce the motor in case of jamming
+    delay(100);
+    digitalWrite(DIRECTION_PIN, HIGH);
+    stepMotor(100);
+    delay(100);
+    digitalWrite(DIRECTION_PIN, LOW);
+    stepMotor(100);
+    delay(100);
 
   // Disable the motor
-  digitalWrite(IN1, LOW);
-  digitalWrite(IN2, LOW);
-  digitalWrite(IN3, LOW);
-  digitalWrite(IN4, LOW);
+  digitalWrite(MOTOR_NENABLE, HIGH);
 
   digitalWrite(DISPENSING_LED, LOW);
 }
 
-// Function to set motor pins
-void setMotorPins(int a, int b, int c, int d) {
-  digitalWrite(IN1, a);
-  digitalWrite(IN2, b);
-  digitalWrite(IN3, c);
-  digitalWrite(IN4, d);
-}
+void stepMotor(int steps) {
+  for(int i = 0; i < steps; i++){
+    delayMicroseconds(3000);
+    digitalWrite(STEP_PIN, HIGH);
+    delayMicroseconds(3000);
+    digitalWrite(STEP_PIN, LOW);
 
-void stepMotor(int steps, int direction) {
-  for (int i = 0; i < steps; i++) {
-    // Loop through the step sequence
-    for (int j = 0; j < 4; j++) {
-      int index = (direction == 1) ? j : (3 - j); // Reverse direction if needed
-      setMotorPins(stepSequence[index][0], stepSequence[index][1],
-                   stepSequence[index][2], stepSequence[index][3]);
-      delay(stepDelay);
-    }
   }
 }

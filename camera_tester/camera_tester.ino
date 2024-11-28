@@ -4,7 +4,7 @@
 
 #define FOOD_LED 4
 #define CAMERA_LED 1
-#define CAMERA_POWER 5
+#define CAMERA_POWER 9
 
 // Define the camera module
 #define CS_PIN 10  // Chip Select Pin for SPI (default for Uno R4)
@@ -14,6 +14,8 @@ void setup() {
   Serial.begin(115200);
   Serial.println("Arducam Light Intensity Test on Uno R4");
 
+  pinMode(CAMERA_POWER, OUTPUT);
+  digitalWrite(CAMERA_POWER, HIGH);
   // Initialize SPI and camera
   Wire.begin(); // SDA and SCL (near AREF on Uno R4)
   SPI.begin();
@@ -21,8 +23,6 @@ void setup() {
   digitalWrite(CS_PIN, HIGH);
 
   // Power the camera
-  pinMode(CAMERA_POWER, OUTPUT);
-  digitalWrite(CAMERA_POWER, HIGH);
 
   // Allow time for the camera to power on
   delay(500);
