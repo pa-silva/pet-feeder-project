@@ -1,5 +1,5 @@
 //Group 17 MREN 318 Pet Feeding Software
-//website used for pet feeding values: https://www.petmd.com/dog/nutrition/are-you-feeding-your-dog-right-amount 
+
 #include <ArduCAM.h>
 #include <SPI.h>
 #include <Wire.h>
@@ -29,7 +29,7 @@ ArduCAM myCAM(OV2640, CS_PIN);
 // defining adjustable values
 #define DISTANCE 20 //can be adjusted (units in cm)
 #define MAX_TIME_AWAKE 10000 //can be adjusted (units in milliseconds)
-#define MIN_WEIGHT 150 //jank, do not touch
+#define MIN_WEIGHT 200 //jank, do not touch
 #define WEIGHT_DEVIANCE 25 //can be adjusted (units in i dont know)
 #define CAMERA_MIN 30 //can be adjusted
 
@@ -334,13 +334,13 @@ void wake_up(){
 
 //sensor and actuator functions
 enum weight_class find_weight_class(int weight){
-  if (150 <= weight && weight < 200) {
+  if (100 <= weight && weight < 300) {
     return S;
   }
-  else if (200 <= weight && weight < 250){
+  else if (300 <= weight && weight < 600){
     return M;
   }
-  else if (250 <= weight){
+  else if (600 <= weight){
     return L;
   }
 }
@@ -391,6 +391,7 @@ void check_camera(){
 
   // Calculate the average light intensity
   float avg_light = (float)light_sum / pixel_count;
+  Serial.println(avg_light);
 
   // Decide food level based on light intensity (focus on red)
   if (avg_light > CAMERA_MIN) { // Adjust threshold as needed based on environment
